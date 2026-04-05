@@ -256,6 +256,16 @@ body.readonly .readonly-badge { display:flex !important }
 .legend-item { display:flex; align-items:center; gap:6px; }
 .legend-dot { width:14px; height:14px; border-radius:3px; flex-shrink:0; }
 
+
+/* RÉSIDENCE SUSPENDUE */
+.res-suspended { border-left-color: #c0392b !important; }
+.res-suspended h4 { color: #c0392b !important; }
+.res-suspended-row { background: #fff5f5 !important; }
+.res-type-appar_ramon_vmc.res-suspended .res-header,
+.res-type-vmc.res-suspended .res-header,
+.res-type-appar.res-suspended .res-header,
+.res-type-appar_vmc.res-suspended .res-header { border-left-color: #c0392b !important; }
+
 </style>
 </head>
 <body>
@@ -31604,6 +31614,7 @@ let currentModalKey = null;
 let currentUser = null;
 let unsubscribe = null;
 let isReadOnly = false;
+let resContractData = {}; // statut contrat par résidence (index)
 
 // Liste des emails en mode lecture seule (bailleur)
 // Ajoutez ici les emails des comptes bailleur
@@ -31717,6 +31728,13 @@ function startListening() {
     window._deletedResidences = snap.val() || {};
     renderAll();
   });
+  // Écouter les statuts de contrat des résidences
+  db.ref('lot3_res_contracts').on('value', snap => {
+    resContractData = snap.val() || {};
+    renderAll();
+    if (document.getElementById('tab-parametres')?.classList.contains('active')) renderParamResidences();
+  });
+
   db.ref('lot3_residences').on('value', snap => {
     const fbRes = snap.val() || {};
     // Supprimer les résidences custom précédemment chargées (celles avec _fbKey)
@@ -31740,6 +31758,11 @@ function startListening() {
     renderAll();
     initAllSearchableSelects();
   });
+}
+
+function isResSuspended(ri) {
+  const c = resContractData[ri];
+  return c && c.statut === 'suspendu';
 }
 
 function getKey(resIdx, locIdx) {
@@ -31839,7 +31862,15 @@ function renderDashboard() {
     const vmcPctDisplay = vmcTotalDisplay > 0 ? Math.round(vmcDoneDisplay / vmcTotalDisplay * 100) : 0;
 
     const div = document.createElement('div');
-    div.className = 'res-progress-item type-' + resType;
+    const _suspended = isResSuspended(ri);
+    div.className = 'res-progress-item type-' + resType + (_suspended ? ' res-suspended' : '');
+    if (_suspended) {
+      const contract = resContractData[ri] || {};
+      const dateFin = contract.dateFin ? ' (fin: ' + contract.dateFin + ')' : '';
+      div.style.borderLeftColor = '#c0392b';
+      div.style.opacity = '0.7';
+      div.title = 'Contrat SUSPENDU' + dateFin;
+    }
     div.title = `Voir la résidence ${res.nom}`;
     div.onclick = () => goToResidence(ri);
 
@@ -31858,6 +31889,13 @@ function renderDashboard() {
       <div class="progress-bar"><div class="progress-fill" style="width:${p}%"></div></div>`;
     }
 
+    if (_suspended) {
+      const contract = resContractData[ri] || {};
+      const dateFin = contract.dateFin ? ' – fin: ' + contract.dateFin : '';
+      innerHtml = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="color:#c0392b;font-size:12px;font-weight:700">🔴 Contrat suspendu${dateFin}</span>
+      </div>` + innerHtml;
+    }
     div.innerHTML = innerHtml;
     cont.appendChild(div);
   });
@@ -31997,13 +32035,20 @@ function renderAccordion() {
       if (dbData[k] && dbData[k].done) doneRes++;
     });
     
+    const _contract = resContractData[ri] || {};
+    const _isSusp = _contract.statut === 'suspendu';
     const div = document.createElement('div');
-    div.className = 'res-accordion res-type-' + resType;
+    div.className = 'res-accordion res-type-' + resType + (_isSusp ? ' res-suspended' : '');
+    if (_isSusp) {
+      div.style.cssText = 'border: 2px solid #c0392b; opacity: 0.75;';
+    }
     const isOpen = openStates[ri] !== undefined ? openStates[ri] : false;
+    const _dateFin = _contract.dateFin ? ' – fin: ' + _contract.dateFin : '';
     div.innerHTML = `
-      <div class="res-header" onclick="toggleRes(this)">
+      <div class="res-header" onclick="toggleRes(this)" style="${_isSusp ? 'background:#fff0f0' : ''}">
         <div>
-          <span class="res-title">${res.nom}</span>
+          <span class="res-title" style="${_isSusp ? 'color:#c0392b' : ''}">${_isSusp ? '🔴 ' : ''}${res.nom}</span>
+          ${_isSusp ? `<span style="font-size:11px;background:#fde8e8;color:#c0392b;padding:1px 8px;border-radius:8px;margin-left:6px;font-weight:700">Contrat suspendu${_dateFin}</span>` : ''}
           <span class="res-count">(${shown > 0 && shown < totalRes ? shown + ' affichés / ' : ''}${totalRes} ${resType === 'vmc' ? 'équipements VMC' : 'logements'})</span>
         </div>
         <div class="res-stats">
@@ -32066,21 +32111,28 @@ function renderParamResidences() {
     const isStatic = !res._fbKey;
     const fbKey = res._fbKey || ('static_' + ri);
 
-    rows += `<tr style="${isDeleted ? 'opacity:.4;text-decoration:line-through' : ''}">
+        const contract = resContractData[ri] || {};
+    const isSuspended = contract.statut === 'suspendu';
+    const contractBadge = isSuspended
+      ? `<span style="background:#fde8e8;color:#c0392b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px">🔴 Suspendu${contract.dateFin ? ' – ' + contract.dateFin : ''}</span>`
+      : `<span style="background:#d5f5e3;color:#27ae60;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px">🟢 Actif</span>`;
+    rows += `<tr style="${isDeleted ? 'opacity:.4;text-decoration:line-through' : (isSuspended ? 'background:#fff5f5' : '')}">
       <td>
-        <span style="display:inline-block;width:10px;height:10px;background:${color};border-radius:2px;margin-right:6px"></span>
-        <strong>${res.nom}</strong>
+        <span style="display:inline-block;width:10px;height:10px;background:${isSuspended ? '#c0392b' : color};border-radius:2px;margin-right:6px"></span>
+        <strong style="${isSuspended ? 'color:#c0392b;text-decoration:line-through' : ''}">${res.nom}</strong>
+        ${contractBadge}
         ${isStatic ? '<span style="font-size:10px;background:#e8f4fd;color:#1a5276;padding:1px 6px;border-radius:8px;margin-left:6px">Statique</span>' : '<span style="font-size:10px;background:#d5f5e3;color:#27ae60;padding:1px 6px;border-radius:8px;margin-left:6px">Personnalisée</span>'}
       </td>
       <td style="color:#64748b;font-size:12px">${label}</td>
       <td style="text-align:center;font-size:13px;color:#64748b">${nbLoc}</td>
-      <td style="text-align:right">
+      <td style="text-align:right;white-space:nowrap">
         ${!isReadOnly && !isDeleted ? `
-          <button class="btn-sm btn-edit" onclick="openResModalEdit('${fbKey}','${res.nom.replace(/'/g,"\\'")}','${type}')" style="margin-right:4px">✏️ Modifier</button>
-          <button class="btn-sm btn-delete" onclick="deleteResidence('${fbKey}','${res.nom.replace(/'/g,"\\'")}')">🗑️ Supprimer</button>
+          <button class="btn-sm" style="background:${isSuspended ? '#27ae60' : '#e67e22'};color:#fff;margin-right:4px" onclick="toggleContratResidence(${ri})">${isSuspended ? '✅ Réactiver' : '⏸️ Suspendre'}</button>
+          <button class="btn-sm btn-edit" onclick="openResModalEdit('${fbKey}','${res.nom.replace(/'/g,"\'")}','${type}')" style="margin-right:4px">✏️ Modifier</button>
+          <button class="btn-sm btn-delete" onclick="deleteResidence('${fbKey}','${res.nom.replace(/'/g,"\'")}')">🗑️ Supprimer</button>
         ` : ''}
         ${!isReadOnly && isDeleted ? `
-          <button class="btn-sm btn-ok" onclick="restoreResidence('${fbKey}','${res.nom.replace(/'/g,"\\'")}')">↩️ Restaurer</button>
+          <button class="btn-sm btn-ok" onclick="restoreResidence('${fbKey}','${res.nom.replace(/'/g,"\'")}')">↩️ Restaurer</button>
         ` : ''}
       </td>
     </tr>`;
@@ -32137,6 +32189,46 @@ window.closeResModal = function() {
   document.getElementById('resModalOverlay').classList.remove('open');
   window._editingResKey = null;
   window._editingResNom = null;
+};
+
+window.toggleContratResidence = function(ri) {
+  if (isReadOnly) return;
+  const contract = resContractData[ri] || {};
+  const isSuspended = contract.statut === 'suspendu';
+  const res = RESIDENCES_DATA[ri];
+  const nom = (res && (locOverrides['res_nom_' + ri] || res.nom)) || ('Résidence ' + ri);
+
+  if (isSuspended) {
+    // Réactiver directement
+    db.ref('lot3_res_contracts/' + ri).update({ statut: 'actif', dateFin: '', updatedAt: new Date().toISOString() }).then(() => {
+      showToast('✅ Contrat réactivé pour « ' + nom + ' »');
+      renderParamResidences();
+      renderAll();
+    });
+  } else {
+    // Ouvrir modal de suspension
+    window._suspendRi = ri;
+    window._suspendNom = nom;
+    document.getElementById('suspendResNom').textContent = nom;
+    document.getElementById('suspendDateFin').value = '';
+    document.getElementById('suspendModalOverlay').classList.add('open');
+  }
+};
+
+window.confirmSuspendRes = function() {
+  const ri = window._suspendRi;
+  const nom = window._suspendNom;
+  const dateFin = document.getElementById('suspendDateFin').value;
+  document.getElementById('suspendModalOverlay').classList.remove('open');
+  db.ref('lot3_res_contracts/' + ri).update({ statut: 'suspendu', dateFin: dateFin || '', updatedAt: new Date().toISOString() }).then(() => {
+    showToast('🔴 Contrat suspendu pour « ' + nom + ' »' + (dateFin ? ' – fin: ' + dateFin : ''));
+    renderParamResidences();
+    renderAll();
+  });
+};
+
+window.closeSuspendModal = function() {
+  document.getElementById('suspendModalOverlay').classList.remove('open');
 };
 
 window.saveResidence = function() {
@@ -33931,5 +34023,23 @@ document.getElementById('vmcModalOverlay').addEventListener('click', function(e)
 });
 
 </script>
+
+<!-- MODAL SUSPENSION RÉSIDENCE -->
+<div id="suspendModalOverlay" class="modal-overlay" onclick="if(event.target===this)closeSuspendModal()">
+  <div class="modal" style="max-width:420px">
+    <h3>⏸️ Suspendre le contrat</h3>
+    <p style="color:#666;font-size:13px;margin-bottom:16px">Résidence : <strong id="suspendResNom"></strong></p>
+    <div class="form-group">
+      <label style="font-size:12px;color:#666;font-weight:600">Date de fin de contrat (optionnelle)</label>
+      <input type="date" id="suspendDateFin" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;margin-top:4px">
+    </div>
+    <p style="color:#e67e22;font-size:12px;margin-top:10px">⚠️ La résidence apparaîtra en rouge dans toute l'application.</p>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeSuspendModal()">Annuler</button>
+      <button class="btn-primary" style="background:#c0392b" onclick="confirmSuspendRes()">🔴 Confirmer la suspension</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
