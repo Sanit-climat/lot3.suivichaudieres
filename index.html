@@ -31912,7 +31912,10 @@ function renderAccordion() {
     res.locataires.forEach((loc, li) => {
       const k = getKey(ri, li);
       const d = dbData[k] || {};
-      const isDone = !!d.done || !!(SEED_LOT3[k]?.done && d.done !== false);
+      const _ovr = locOverrides[k] || {};
+      const _nxt = _ovr.dateProchainEntretien || '';
+      const _nxtYr = _nxt ? parseInt(_nxt.slice(0,4)) : 0;
+      const isDone = !!d.done || !!(SEED_LOT3[k]?.done && d.done !== false) || !!_ovr.done || !!(_ovr.dateEntretienPrec && _ovr.dateEntretienPrec !== '') || !!(_ovr.dateEntretien2026 && _ovr.dateEntretien2026 !== '') || (_nxtYr >= 2027);
       count++;
       
       // Filter
@@ -32351,7 +32354,7 @@ function getMergedLocataires() {
       result.push({
         ...loc, ...override,
         dateProchainEntretien: dateProchainEntretien || override.dateProchainEntretien || '',
-        _resIdx: ri, _locIdx: li, _key: key, _resNom: res.nom, _isNew: false
+        _resIdx: ri, _locIdx: li, _key: key, _resNom: res.nom, _isNew: false, _done: (!!((dbData[key]||{}).done) || !!(SEED_LOT3[key]?.done && (dbData[key]||{}).done !== false) || !!(override.done) || !!(override.dateEntretienPrec && override.dateEntretienPrec !== '') || !!(override.dateEntretien2026 && override.dateEntretien2026 !== '') || (parseInt((override.dateProchainEntretien||'').slice(0,4))||0) >= 2027)
       });
     });
   });
@@ -32798,7 +32801,9 @@ function renderEquipementsTable() {
   let rows = '';
   filtered.forEach(e => {
     const d = dbData[e.k] || {};
-    const isDone = !!d.done || !!(SEED_LOT3[e.k]?.done && d.done !== false);
+    const _ovr3 = locOverrides[e.k] || {};
+    const _nxt3 = _ovr3.dateProchainEntretien || '';
+    const isDone = !!d.done || !!(SEED_LOT3[e.k]?.done && d.done !== false) || !!_ovr3.done || !!(_ovr3.dateEntretienPrec && _ovr3.dateEntretienPrec !== '') || !!(_ovr3.dateEntretien2026 && _ovr3.dateEntretien2026 !== '') || (parseInt(_nxt3.slice(0,4))||0) >= 2027;
     const locOver = locOverrides[e.k] || {};
     const dateStr = d.date || '';
       const dateDisplay = fmtDate(d.date);
@@ -32901,7 +32906,9 @@ function renderLocatairesTable() {
     if (statutFilter !== 'all') {
       const k = `r${loc._resIdx}_l${loc._locIdx}`;
       const dEntry = dbData[k] || {};
-      const done = !!dEntry.done || !!(SEED_LOT3[k]?.done && dEntry.done !== false);
+      const _locOv4 = locOverrides[k] || {};
+    const _nxt4 = _locOv4.dateProchainEntretien || '';
+    const done = !!dEntry.done || !!(SEED_LOT3[k]?.done && dEntry.done !== false) || !!_locOv4.done || !!(_locOv4.dateEntretienPrec && _locOv4.dateEntretienPrec !== '') || !!(_locOv4.dateEntretien2026 && _locOv4.dateEntretien2026 !== '') || (parseInt(_nxt4.slice(0,4))||0) >= 2027;
       if (statutFilter === 'todo' && done) return false;
       if (statutFilter === 'done' && !done) return false;
     }
@@ -32951,12 +32958,20 @@ function renderLocatairesTable() {
     const email = loc.email ? `<a href="mailto:${loc.email}" style="color:var(--secondary);font-size:11px">${loc.email}</a>` : '—';
 
     // Statut entretien
-    const k = `r${loc._resIdx}_l${loc._locIdx}`;
+    const k = loc._isNew ? loc._key : `r${loc._resIdx}_l${loc._locIdx}`;
     const dEntry = dbData[k] || {};
-    const done = !!dEntry.done || !!(SEED_LOT3[k]?.done && dEntry.done !== false);
+    const locOvEntry = locOverrides[k] || {};
+    const nextDate = loc.dateProchainEntretien || locOvEntry.dateProchainEntretien || '';
+    const nextDateYear = nextDate ? parseInt(nextDate.slice(0, 4)) : 0;
+    const done = !!dEntry.done
+      || !!(SEED_LOT3[k]?.done && dEntry.done !== false)
+      || !!locOvEntry.done
+      || !!(locOvEntry.dateEntretienPrec && locOvEntry.dateEntretienPrec !== '')
+      || !!(locOvEntry.dateEntretien2026 && locOvEntry.dateEntretien2026 !== '')
+      || (nextDateYear >= 2027);
     const statusBadge = done
       ? `<span class="loc-status-badge loc-status-done">✅ Fait</span>`
-      : `<span class="loc-status-badge loc-status-pending">En attente</span>`;
+      : `<span class="loc-status-badge loc-status-pending">⏳ En attente</span>`;
 
     // Nombre d'interventions
     const intervCount = Object.values(intervData || {}).filter(d =>
@@ -33318,6 +33333,22 @@ window.saveIntervention = function() {
       date,
       comment: data.comment || document.getElementById('intervComment').value.trim()
     });
+    // Si c'est un entretien annuel, mettre à jour les dates dans lot3_locataires
+    if (data.type === 'Entretien annuel chaudière' || data.type === 'Entretien annuel') {
+      try {
+        const dateObj = new Date(date);
+        if (!isNaN(dateObj.getTime())) {
+          const nextYear = new Date(dateObj);
+          nextYear.setFullYear(nextYear.getFullYear() + 1);
+          const nextDateStr = nextYear.toISOString().slice(0, 10);
+          db.ref(`lot3_locataires/${k}`).update({
+            dateEntretienPrec: date,
+            dateProchainEntretien: nextDateStr,
+            dateEntretien2026: date.startsWith('2026') ? date : (locOverrides[k]?.dateEntretien2026 || '')
+          });
+        }
+      } catch(e) {}
+    }
     showToast('✅ Intervention enregistrée !');
   }
   closeIntervModal();
@@ -33548,7 +33579,9 @@ function openBailleurView() {
     locs.forEach(loc => {
       const k = 'r' + loc._resIdx + '_l' + loc._locIdx;
       const d_bailleur = dbData[k] || {};
-      const done = !!d_bailleur.done || !!(SEED_LOT3[k]?.done && d_bailleur.done !== false);
+      const _ovr5 = locOverrides[k] || {};
+      const _nxt5 = _ovr5.dateProchainEntretien || '';
+      const done = !!d_bailleur.done || !!(SEED_LOT3[k]?.done && d_bailleur.done !== false) || !!_ovr5.done || !!(_ovr5.dateEntretienPrec && _ovr5.dateEntretienPrec !== '') || !!(_ovr5.dateEntretien2026 && _ovr5.dateEntretien2026 !== '') || (parseInt(_nxt5.slice(0,4))||0) >= 2027;
       const statut = done ? '✅ Fait' : '⏳ En attente';
       const s = suiviData[getSuiviKey(loc)] || {};
 
