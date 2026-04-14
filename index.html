@@ -294,7 +294,7 @@ body.readonly .readonly-badge { display:flex !important }
   </div>
   <div class="header-right">
     <span class="readonly-badge">👁️ Mode lecture seule</span>
-    <span id="userEmail">sanit.climat13015@gmail.com</span>
+    <span id="userEmail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4231232c2b366c212e2b2f2336737172737702252f232b2e6c212d2f">[email&#160;protected]</a></span>
     <button id="btnLogout" onclick="doLogout()">Déconnexion</button>
   </div>
 </header>
@@ -31390,7 +31390,7 @@ body.readonly .readonly-badge { display:flex !important }
 </div>
 </div>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ===================== SEARCHABLE SELECT =====================
 const _ssState = {}; // id → {value, label}
 
@@ -33296,6 +33296,16 @@ function buildIntervLocOptions(ri) {
     const lgt = over.lgt || loc.lgt || li;
     opts.push({ value: li, label: `${nom} — Lgt ${lgt}` });
   });
+  // Ajouter les locataires ajoutés manuellement (_isNew) pour cette résidence
+  Object.keys(locOverrides).forEach(k => {
+    if (!k.startsWith('new_')) return;
+    const loc = locOverrides[k];
+    if (loc._deleted) return;
+    if (String(loc._resIdx) !== String(ri)) return;
+    const nom = loc.nom || '—';
+    const lgt = loc.lgt || '—';
+    opts.push({ value: k, label: `${nom} — Lgt ${lgt}` });
+  });
   return opts;
 }
 
@@ -33379,23 +33389,36 @@ window.saveIntervention = function() {
   const riStr = ssGetValue('intervResWrap');
   const liStr = ssGetValue('intervLocWrap');
   const ri = riStr !== '' ? parseInt(riStr) : NaN;
-  const li = liStr !== '' ? parseInt(liStr) : NaN;
   const date = document.getElementById('intervDate').value;
 
-  if (isNaN(ri) || isNaN(li) || !date) {
+  // liStr peut être un index numérique ou une clé new_XXXXX (locataire ajouté manuellement)
+  const isNewLoc = typeof liStr === 'string' && liStr.startsWith('new_');
+  const li = (!isNewLoc && liStr !== '') ? parseInt(liStr) : NaN;
+
+  if (isNaN(ri) || (isNaN(li) && !isNewLoc) || liStr === '' || !date) {
     alert('Veuillez renseigner la résidence, le locataire et la date.');
     return;
   }
 
   const res = RESIDENCES_DATA[ri];
-  const loc = res?.locataires[li];
-  const over = locOverrides[`r${ri}_l${li}`] || {};
-  const locNom = over.nom || loc?.nom || '';
-  const chaudiereVal = getLocChaudiere(ri, li);
+  let locNom, chaudiereVal, _locKey;
+  if (isNewLoc) {
+    const newLocData = locOverrides[liStr] || {};
+    locNom = newLocData.nom || '';
+    chaudiereVal = getLocChaudiere(null, null, liStr);
+    _locKey = liStr;
+  } else {
+    const loc = res?.locataires[li];
+    const over = locOverrides[`r${ri}_l${li}`] || {};
+    locNom = over.nom || loc?.nom || '';
+    chaudiereVal = getLocChaudiere(ri, li);
+    _locKey = getKey(ri, li);
+  }
 
   const data = {
     resIdx: ri,
-    locIdx: li,
+    locIdx: isNewLoc ? null : li,
+    locNewKey: isNewLoc ? liStr : null,
     locNom,
     resNom: res?.nom || '',
     chaudiere: chaudiereVal || '',
@@ -33417,7 +33440,7 @@ window.saveIntervention = function() {
     data.createdBy = data.updatedBy;
     db.ref(`lot1_interventions/${uid}`).set(data);
     // Marquer aussi l'entretien comme fait dans lot3/
-    const k = getKey(ri, li);
+    const k = isNewLoc ? _locKey : getKey(ri, li);
     db.ref(`lot3/${k}`).update({
       done: true,
       doneAt: data.createdAt,
@@ -34035,11 +34058,4 @@ document.getElementById('vmcModalOverlay').addEventListener('click', function(e)
     </div>
     <p style="color:#e67e22;font-size:12px;margin-top:10px">⚠️ La résidence apparaîtra en rouge dans toute l'application.</p>
     <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeSuspendModal()">Annuler</button>
-      <button class="btn-primary" style="background:#c0392b" onclick="confirmSuspendRes()">🔴 Confirmer la suspension</button>
-    </div>
-  </div>
-</div>
-
-</body>
-</html>
+      <button c
