@@ -31068,7 +31068,7 @@ body.readonly .readonly-badge { display:flex !important }
     </div>
     <div class="form-field">
       <label>N° APPARTEMENT</label>
-      <input type="text" id="locAppart" placeholder="Ex: Bât A3 – Ét 0 – N°249 (T3)" readonly="" style="background:#f8fafc;color:#64748b">
+      <input type="text" id="locAppart" placeholder="Ex: Bât A3 – Ét 0 – N°249 (T3)">
     </div>
 
     <!-- Ligne 3: Chaudière / Téléphone -->
@@ -31122,14 +31122,38 @@ body.readonly .readonly-badge { display:flex !important }
       <input type="date" id="locDateProchainVMC">
     </div>
 
-    <!-- Champs cachés pour localisation précise -->
-    <div class="form-field" style="display:none"><input type="text" id="locRef"></div>
-    <div class="form-field" style="display:none"><input type="text" id="locBat"></div>
-    <div class="form-field" style="display:none"><input type="text" id="locEsc"></div>
-    <div class="form-field" style="display:none"><input type="text" id="locEtage"></div>
-    <div class="form-field" style="display:none"><input type="text" id="locLgt"></div>
-    <div class="form-field" style="display:none"><select id="locType"><option value="">—</option><option>T1</option><option>T2</option><option>T3</option><option>T4</option><option>T5</option><option>T6</option></select></div>
-    <div class="form-field" style="display:none"><input type="text" id="locAdresse"></div>
+    <!-- Champs localisation précise -->
+    <div class="form-field full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+      <label style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px">📍 Localisation</label>
+    </div>
+    <div class="form-field">
+      <label>BÂTIMENT</label>
+      <input type="text" id="locBat" placeholder="Ex: BAT A, BATIMENT B..." oninput="updateLocAppart()">
+    </div>
+    <div class="form-field">
+      <label>RÉFÉRENCE BAIL</label>
+      <input type="text" id="locRef" placeholder="Ex: E02540001L">
+    </div>
+    <div class="form-field">
+      <label>ESCALIER</label>
+      <input type="text" id="locEsc" placeholder="Ex: ESC 1">
+    </div>
+    <div class="form-field">
+      <label>ÉTAGE</label>
+      <input type="text" id="locEtage" placeholder="Ex: RDC, 1, 2..." oninput="updateLocAppart()">
+    </div>
+    <div class="form-field">
+      <label>N° LOGEMENT</label>
+      <input type="text" id="locLgt" placeholder="Ex: 12, 249..." oninput="updateLocAppart()">
+    </div>
+    <div class="form-field">
+      <label>TYPE</label>
+      <select id="locType" onchange="updateLocAppart()"><option value="">—</option><option>T1</option><option>T2</option><option>T3</option><option>T4</option><option>T5</option><option>T6</option></select>
+    </div>
+    <div class="form-field full">
+      <label>ADRESSE</label>
+      <input type="text" id="locAdresse" placeholder="Ex: 26 RUE NICOLE ZEMMOUR 13009 MARSEILLE">
+    </div>
 
     <!-- Notes pleine largeur -->
     <div class="form-field full">
@@ -32491,6 +32515,26 @@ function initLocModalSelects() {
   // Filtre résidences pour les tabs - géré par initAllSearchableSelects()
 }
 
+// Met à jour le champ N° Appartement automatiquement depuis bat/etage/lgt/type
+window.updateLocAppart = function() {
+  const bat   = (document.getElementById('locBat')?.value || '').trim();
+  const etage = (document.getElementById('locEtage')?.value || '').trim();
+  const lgt   = (document.getElementById('locLgt')?.value || '').trim();
+  const type  = (document.getElementById('locType')?.value || '').trim();
+  let parts = [];
+  if (bat)   parts.push('Bât ' + bat);
+  if (etage) parts.push('Ét ' + etage);
+  if (lgt)   parts.push('N°' + lgt);
+  if (type)  parts.push('(' + type + ')');
+  const appart = document.getElementById('locAppart');
+  if (appart && appart.value === '' || appart.dataset.auto === '1') {
+    appart.value = parts.join(' – ');
+    appart.dataset.auto = parts.length > 0 ? '1' : '0';
+  }
+}
+
+window.updateLocRef = function() {}  // placeholder (résidence select)
+
 window.openLocModal = function(resIdx, locIdx, newKey) {
   initLocModalSelects();
   const overlay = document.getElementById('locModalOverlay');
@@ -32563,7 +32607,9 @@ function fillLocForm(loc) {
     loc.lgt ? `N°${loc.lgt}` : ''
   ].filter(Boolean).join(' – ');
   const appt = loc.type ? `${locInfo}${loc.type ? ` (${loc.type})` : ''}` : locInfo;
-  document.getElementById('locAppart').value = appt || '';
+  const apptEl = document.getElementById('locAppart');
+  apptEl.value = appt || '';
+  apptEl.dataset.auto = appt ? '1' : '0';
 
   // Chaudière — liste dynamique depuis Firebase
   populateLocChaudiereSelect(loc.chaudiereKey || '');
